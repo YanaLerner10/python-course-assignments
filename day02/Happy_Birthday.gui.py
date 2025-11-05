@@ -1,120 +1,157 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from datetime import datetime, date
-from ttkthemes import ThemedTk
+from datetime import date, datetime
+import random
 
-class BirthdayCountdownGUI:
+def calculate_time_to_birthday(birthday_date):
+    today = date.today()
+    try:
+        next_birthday = date(today.year, birthday_date.month, birthday_date.day)
+    except ValueError:
+        # handle Feb 29 on non-leap year by using Mar 1
+        next_birthday = date(today.year, 3, 1)
+    if next_birthday < today:
+        try:
+            next_birthday = date(today.year + 1, birthday_date.month, birthday_date.day)
+        except ValueError:
+            next_birthday = date(today.year + 1, 3, 1)
+    delta = next_birthday - today
+    total_days = delta.days
+    months = total_days // 30
+    remaining_days = total_days % 30
+    weeks = remaining_days // 7
+    days = remaining_days % 7
+    return months, weeks, days
+
+class BirthdayApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("🎂 Birthday Countdown 🎈")
-        self.root.geometry("400x600")
-        
-        # Configure style
-        style = ttk.Style()
-        style.configure('Birthday.TFrame', background='#FFE4E1')
-        style.configure('Birthday.TLabel',
-                       font=('Comic Sans MS', 12),
-                       background='#FFE4E1',
-                       foreground='#FF69B4')
-        style.configure('Title.TLabel',
-                       font=('Comic Sans MS', 20, 'bold'),
-                       background='#FFE4E1',
-                       foreground='#FF1493')
-        
-        # Main frame
-        self.main_frame = ttk.Frame(root, style='Birthday.TFrame', padding="20")
-        self.main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Title with emojis
-        title_label = ttk.Label(self.main_frame,
-                               text="🎉 Birthday Countdown 🎉",
-                               style='Title.TLabel')
-        title_label.pack(pady=20)
-        
-        # Birthday cake image (using text art)
-        cake_art = """
-           🎂
-        ╱▔▔▔▔▔╲
-        │∏∏∏∏∏│
-        │∏∏∏∏∏│
-        ╲▁▁▁▁▁╱
-        """
-        cake_label = ttk.Label(self.main_frame,
-                              text=cake_art,
-                              font=('Courier', 14),
-                              style='Birthday.TLabel')
-        cake_label.pack(pady=20)
-        
-        # Date entry frame
-        date_frame = ttk.Frame(self.main_frame, style='Birthday.TFrame')
-        date_frame.pack(pady=20)
-        
-        # Date entry fields
-        ttk.Label(date_frame, text="Day:", style='Birthday.TLabel').grid(row=0, column=0, padx=5)
-        self.day_var = tk.StringVar()
-        self.day_entry = ttk.Entry(date_frame, width=3, textvariable=self.day_var)
-        self.day_entry.grid(row=0, column=1, padx=5)
-        
-        ttk.Label(date_frame, text="Month:", style='Birthday.TLabel').grid(row=0, column=2, padx=5)
-        self.month_var = tk.StringVar()
-        self.month_entry = ttk.Entry(date_frame, width=3, textvariable=self.month_var)
-        self.month_entry.grid(row=0, column=3, padx=5)
-        
-        ttk.Label(date_frame, text="Year:", style='Birthday.TLabel').grid(row=0, column=4, padx=5)
-        self.year_var = tk.StringVar()
-        self.year_entry = ttk.Entry(date_frame, width=5, textvariable=self.year_var)
-        self.year_entry.grid(row=0, column=5, padx=5)
-        
-        # Calculate button
-        calculate_button = tk.Button(self.main_frame,
-                                   text="🎈 Calculate! 🎈",
-                                   command=self.calculate_countdown,
-                                   font=('Comic Sans MS', 12, 'bold'),
-                                   bg='#FF69B4',
-                                   fg='white',
-                                   relief='raised',
-                                   cursor='hand2')
-        calculate_button.pack(pady=20)
-        
-        # Result labels
-        self.result_frame = ttk.Frame(self.main_frame, style='Birthday.TFrame')
-        self.result_frame.pack(pady=20)
-        
-        self.months_var = tk.StringVar()
-        self.weeks_var = tk.StringVar()
-        self.days_var = tk.StringVar()
-        
-        ttk.Label(self.result_frame, text="🎁 Time until your next birthday:", 
-                 style='Birthday.TLabel').pack(pady=10)
-        
-        for var, text in [(self.months_var, "Months"), 
-                         (self.weeks_var, "Weeks"), 
-                         (self.days_var, "Days")]:
-            result_label = ttk.Label(self.result_frame,
-                                   textvariable=var,
-                                   style='Birthday.TLabel')
-            result_label.pack(pady=5)
+        root.title("🎉 Birthday Countdown")
+        root.configure(bg="#fff7f9")
+        root.geometry("360x520")
+        root.resizable(False, False)
 
-    def calculate_countdown(self):
+        # Title
+        title = tk.Label(root, text="🎂 Birthday Countdown 🎈", font=("Segoe UI", 18, "bold"),
+                         bg="#fff7f9", fg="#b30066")
+        title.pack(pady=(18, 6))
+
+        # Decorative canvas (cake + confetti)
+        self.canvas = tk.Canvas(root, width=300, height=140, bg="#fff7f9", highlightthickness=0)
+        self.canvas.pack()
+        self.draw_cake()
+
+        # Input frame (day, month, year)
+        frame = ttk.Frame(root)
+        frame.pack(pady=12)
+
+        ttk.Label(frame, text="Day").grid(row=0, column=0, padx=6, pady=2)
+        ttk.Label(frame, text="Month").grid(row=0, column=1, padx=6, pady=2)
+        ttk.Label(frame, text="Year").grid(row=0, column=2, padx=6, pady=2)
+
+        self.day_var = tk.StringVar()
+        self.month_var = tk.StringVar()
+        self.year_var = tk.StringVar()
+
+        self.day_entry = ttk.Entry(frame, width=5, textvariable=self.day_var, justify="center")
+        self.month_entry = ttk.Entry(frame, width=5, textvariable=self.month_var, justify="center")
+        self.year_entry = ttk.Entry(frame, width=8, textvariable=self.year_var, justify="center")
+
+        self.day_entry.grid(row=1, column=0, padx=6)
+        self.month_entry.grid(row=1, column=1, padx=6)
+        self.year_entry.grid(row=1, column=2, padx=6)
+
+        ttk.Label(root, text="Enter your birthday (numbers only)", background="#fff7f9",
+                  foreground="#6b6b6b").pack(pady=(6, 8))
+
+        # Calculate button
+        calc_btn = tk.Button(root, text="Calculate Time 🎈", command=self.calculate,
+                             bg="#ff78b6", fg="white", bd=0, font=("Segoe UI", 11, "bold"), activebackground="#ff5fa0")
+        calc_btn.pack(pady=8, ipadx=6, ipady=6)
+
+        # Results area
+        self.result_frame = ttk.Frame(root)
+        self.result_frame.pack(pady=14)
+
+        self.months_label = tk.Label(self.result_frame, text="", font=("Segoe UI", 13), bg="#fff7f9", fg="#b30066")
+        self.weeks_label = tk.Label(self.result_frame, text="", font=("Segoe UI", 13), bg="#fff7f9", fg="#ff6f91")
+        self.days_label = tk.Label(self.result_frame, text="", font=("Segoe UI", 13), bg="#fff7f9", fg="#ff9bb3")
+
+        self.months_label.pack(pady=4)
+        self.weeks_label.pack(pady=4)
+        self.days_label.pack(pady=4)
+
+        # small tip & footer
+        tip = tk.Label(root, text="Assumes: 12 months, 52 weeks, 365 days approximation", bg="#fff7f9",
+                       fg="#777777", font=("Segoe UI", 9))
+        tip.pack(side="bottom", pady=8)
+
+        # for confetti animation
+        self.confetti_items = []
+        self.animating = False
+
+        # Bind Enter key to calculate
+        root.bind("<Return>", lambda e: self.calculate())
+
+    def draw_cake(self):
+        c = self.canvas
+        c.delete("all")
+        # base cake
+        c.create_oval(60, 40, 240, 120, fill="#ffe6f2", outline="#ff9ccf")
+        c.create_rectangle(80, 50, 220, 95, fill="#ffd9ec", outline="#ff9ccf")
+        # candles
+        for i, x in enumerate((110, 140, 170)):
+            c.create_rectangle(x - 3, 22, x + 3, 50, fill="#fff7a8", outline="#f7d04d")
+            c.create_oval(x - 5, 14, x + 5, 22, fill="#ffb3d9", outline="#ff8fc1")
+        c.create_text(150, 105, text="Make a wish!", font=("Segoe UI", 10, "italic"), fill="#b30066")
+
+    def pop_confetti(self):
+        # create confetti pieces
+        for _ in range(18):
+            x = random.randint(10, 290)
+            y = random.randint(-20, 0)
+            size = random.randint(4, 9)
+            color = random.choice(["#ff6f91", "#ffd166", "#a0e7e5", "#b2ff9e", "#ffb3d9"])
+            oval = self.canvas.create_oval(x, y, x + size, y + size, fill=color, outline="")
+            self.confetti_items.append((oval, random.uniform(1, 3)))  # (id, speed)
+        if not self.animating:
+            self.animating = True
+            self.animate_confetti()
+
+    def animate_confetti(self):
+        keep = []
+        for item, speed in self.confetti_items:
+            self.canvas.move(item, 0, speed)
+            coords = self.canvas.coords(item)
+            if coords and coords[1] < 160:
+                keep.append((item, speed))
+            else:
+                self.canvas.delete(item)
+        self.confetti_items = keep
+        if self.confetti_items:
+            self.root.after(40, self.animate_confetti)
+        else:
+            self.animating = False
+
+    def calculate(self):
         try:
-            day = int(self.day_var.get())
-            month = int(self.month_var.get())
-            year = int(self.year_var.get())
-            
-            birthday_date = date(year, month, day)
+            d = int(self.day_var.get())
+            m = int(self.month_var.get())
+            y_text = self.year_var.get().strip()
+            y = int(y_text) if y_text else date.today().year  # year optional; default to current year
+            # validate by creating date
+            birthday_date = date(y, m, d)
             months, weeks, days = calculate_time_to_birthday(birthday_date)
-            
-            self.months_var.set(f"🎈 {months} months")
-            self.weeks_var.set(f"🎁 {weeks} weeks")
-            self.days_var.set(f"🎂 {days} days")
-            
+            self.months_label.config(text=f"🗓️  {months} months")
+            self.weeks_label.config(text=f"📅  {weeks} weeks")
+            self.days_label.config(text=f"📆  {days} days")
+            self.pop_confetti()
         except ValueError:
-            messagebox.showerror("Error", "Please enter valid date numbers!")
+            messagebox.showerror("Invalid input", "Please enter valid numeric day, month and optional year.\nDay and month must form a valid date.")
 
 def main():
-    root = ThemedTk(theme="plastik")
-    root.configure(background='#FFE4E1')
-    app = BirthdayCountdownGUI(root)
+    root = tk.Tk()
+    app = BirthdayApp(root)
     root.mainloop()
 
 if __name__ == "__main__":
