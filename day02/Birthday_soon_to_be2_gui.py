@@ -3,6 +3,34 @@ from tkinter import ttk, messagebox
 from datetime import datetime, date
 from ttkthemes import ThemedTk
 
+# ...existing code...
+def calculate_time_to_birthday(birthday_date):
+    """
+    Return (months, weeks, days) until the next occurrence of birthday_date.
+    Uses the approximation: 1 month = 30 days, 1 week = 7 days.
+    """
+    today = date.today()
+    try:
+        next_birthday = date(today.year, birthday_date.month, birthday_date.day)
+    except ValueError:
+        # handle Feb 29 on non-leap year: treat next birthday as Mar 1
+        next_birthday = date(today.year, 3, 1)
+
+    if next_birthday < today:
+        try:
+            next_birthday = date(today.year + 1, birthday_date.month, birthday_date.day)
+        except ValueError:
+            next_birthday = date(today.year + 1, 3, 1)
+
+    delta = next_birthday - today
+    total_days = delta.days
+    months = total_days // 30
+    remaining_days = total_days % 30
+    weeks = remaining_days // 7
+    days = remaining_days % 7
+    return months, weeks, days
+# ...existing code...
+
 class BirthdayCountdownGUI:
     def __init__(self, root):
         self.root = root
