@@ -1,17 +1,17 @@
-**This GUI calculates how many days are left until your next birthday. 
+#This GUI calculates how many days are left until your next birthday. 
 I created 2 virsions of it- a simple version with no extanstions needead (regular) and a virsion that you need to download TTKTHEMES.**
 
-I used copilot to help me. 
+##I used copilot to help me. 
 
 
-Prompts I used
+###Prompts I used
 
   - I want to create a code that will calculte how many months, weaks and days you have until your next birthday. assuming there are 52 weeks, 365 days, and 12 months. it should know the current day, and the birthday is supplied by the user.
 
-    -great, now can you create a nice gui for that. use a nice theme to make it fell like a birthday
+    great, now can you create a nice gui for that. use a nice theme to make it fell like a birthday
 
 
-At this point I got confussed becuse copilot asked me to install this:
+-At this point I got confussed becuse copilot asked me to install this:
 
   To use this GUI version, you'll need to install the ttkthemes package first. Open your terminal in VS Code and run:
 pip install ttkthemes.
