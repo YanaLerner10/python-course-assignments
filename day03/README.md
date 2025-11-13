@@ -24,23 +24,22 @@ tests/
 
 ## Installation & Setup
 
-### Create and activate a virtual environment
-```powershell
+### Create a virtual enviorment
 uv venv
 
-## Install dependencies
+### Install dependencies
 uv pip install pytest
 
-## Running the Program
+### Running the Program
 uv run python gui.py
 
-## Running Tests
+### Running Tests
 
 To verify that the logic works:
 
 uv run pytest -q
 
-# Use of AI in the Project
+## Use of AI in the Project
 
 1. Structuring the code into business logic + GUI layers.
 
@@ -50,7 +49,7 @@ uv run pytest -q
 
 4. Creating this README.md.
 
-# Prompts Used:
+## Prompts Used:
 
 1. “Copy your project from the day02 folder to the new day03 folder. Move the business logic to a separate file.”
 
@@ -63,6 +62,7 @@ uv run pytest -q
 5. “Add a README.md explaining how to install dependencies, if there are any. Also explain how you used AI.”
 
 Each step was reviewed and tested manually after generating with ChatGPT (GPT-5).
+
 
 
 
