@@ -28,17 +28,18 @@ tests/
 ```powershell
 uv venv
 
-### Install dependencies
+**### Install dependencies**
 uv pip install pytest
 
-### Running the Program
+**### Running the Program**
 uv run python gui.py
 
-### Running Tests
+**### Running Tests**
 
 To verify that the logic works:
 
 uv run pytest -q
+
 
 
 
