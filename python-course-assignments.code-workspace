@@ -1,0 +1,10 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"python-envs.defaultPackageManager": "ms-python.python:conda"
+	}
+}
