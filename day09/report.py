@@ -1,23 +1,4 @@
 #!/usr/bin/env python3
-"""
-Day09 report generator
-
-Reads:
-  - day09/subjects.txt : tab-separated list of GitHub issues (id, state, title, ..., created_at)
-  - README.md          : course README containing deadlines and the student roster table
-
-Outputs:
-  - report.md          : a Markdown report (or prints to stdout with --stdout)
-
-Usage:
-  python day09_report.py --subjects day09/subjects.txt --readme README.md --out report.md
-  python day09_report.py --subjects day09/subjects.txt --readme README.md --stdout
-
-Notes:
-  - Deadlines in README are assumed to be in Asia/Jerusalem time (course local time).
-  - Issue timestamps are assumed to be UTC ISO strings ending with 'Z' (e.g. 2026-01-03T18:44:38Z).
-"""
-
 from __future__ import annotations
 
 import argparse
@@ -31,8 +12,10 @@ from zoneinfo import ZoneInfo
 LOCAL_TZ = ZoneInfo("Asia/Jerusalem")
 UTC = dt.timezone.utc
 
+# Matches: Day1, Day 1, Day01, day 01, etc.
 DAY_RE = re.compile(r"\bday\s*0?(\d{1,2})\b", re.IGNORECASE)
 
+# Student name extraction patterns from subject/title
 NAME_PATTERNS = [
     re.compile(r"\bby\s+(.+)$", re.IGNORECASE),
     re.compile(r"\bday\s*\d{1,2}\s*[-:]\s*(.+)$", re.IGNORECASE),
@@ -57,13 +40,11 @@ def normalize_spaces(s: str) -> str:
 
 
 def normalize_name(name: str) -> str:
-    # Keep original capitalization (it is useful), but normalize whitespace.
     return normalize_spaces(name)
 
 
 def parse_issue_created_at(s: str) -> dt.datetime:
-    # Expected: 2026-01-03T18:44:38Z
-    # We parse it as UTC.
+    # e.g. 2026-01-03T18:44:38Z
     s = s.strip()
     if s.endswith("Z"):
         s = s[:-1] + "+00:00"
@@ -96,13 +77,8 @@ def classify_title_format(title: str) -> str:
 
 
 def parse_title(title: str) -> tuple[str, tuple[str, ...]]:
-    """
-    Returns: (student_name, assignments)
-    assignments include dayXX and/or 'final_project_proposal'
-    """
     t = normalize_spaces(title)
 
-    # student name
     student = None
     for pat in NAME_PATTERNS:
         m = pat.search(t)
@@ -110,11 +86,9 @@ def parse_title(title: str) -> tuple[str, tuple[str, ...]]:
             student = normalize_name(m.group(1))
             break
     if student is None:
-        # fallback (should be rare)
         student = "UNKNOWN"
 
     assignments: list[str] = []
-
     tl = t.lower()
     if "final project proposal" in tl or "proposal for final project" in tl:
         assignments.append("final_project_proposal")
@@ -124,13 +98,13 @@ def parse_title(title: str) -> tuple[str, tuple[str, ...]]:
 
     # de-dup preserve order
     seen = set()
-    uniq: list[str] = []
+    out: list[str] = []
     for a in assignments:
         if a not in seen:
-            uniq.append(a)
+            out.append(a)
             seen.add(a)
 
-    return student, tuple(uniq)
+    return student, tuple(out)
 
 
 def read_subjects(subjects_path: str) -> list[Issue]:
@@ -168,10 +142,7 @@ def read_subjects(subjects_path: str) -> list[Issue]:
 
 
 def parse_students_from_readme(readme_text: str) -> list[str]:
-    """
-    Extracts student names from the 'Students' table in README.md.
-    Looks for markdown table rows starting with: | [Name](
-    """
+    # Parses the Markdown table rows: | [Name](...) |
     names: list[str] = []
     for line in readme_text.splitlines():
         if line.startswith("| [") and "](" in line:
@@ -183,18 +154,16 @@ def parse_students_from_readme(readme_text: str) -> list[str]:
 
 def parse_deadlines_from_readme(readme_text: str) -> dict[str, dt.datetime]:
     """
-    Extract deadlines of the form:
-      * Dead-line: YYYY.MM.DD HH:MM
-    under:
-      ### Assignment (day X)
-
-    Returns dict: {"day01": deadline_utc, ...}
-
-    If some day has "TBD" or no deadline, it's omitted.
+    Extracts '* Dead-line: YYYY.MM.DD HH:MM' for each '### Assignment (day X)' block.
+    IMPORTANT: stop the block at the next '### Assignment' (not '##'), otherwise parsing may break
+    depending on README structure.
     """
     deadlines: dict[str, dt.datetime] = {}
 
-    section_pat = re.compile(r"### Assignment \(day\s*(\d+)\)(.*?)(?:\n## |\Z)", re.S)
+    section_pat = re.compile(
+        r"### Assignment \(day\s*(\d+)\)(.*?)(?=\n### Assignment|\n## |\Z)",
+        re.S,
+    )
     for m in section_pat.finditer(readme_text):
         day_num = int(m.group(1))
         body = m.group(2)
@@ -202,67 +171,89 @@ def parse_deadlines_from_readme(readme_text: str) -> dict[str, dt.datetime]:
         if not dm:
             continue
         local_naive = dt.datetime.strptime(dm.group(1), "%Y.%m.%d %H:%M")
-        deadline_utc = local_naive.replace(tzinfo=LOCAL_TZ).astimezone(UTC)
-        deadlines[f"day{day_num:02d}"] = deadline_utc
+        deadlines[f"day{day_num:02d}"] = local_naive.replace(tzinfo=LOCAL_TZ).astimezone(UTC)
 
-    # Also parse project proposal/submission deadlines if present (nice-to-have)
-    proj_pat = re.compile(
-        r"\*\s*Project\s+(proposal|submission)\s+dead-line:\s*(\d{4}\.\d{2}\.\d{2}\s+\d{2}:\d{2})",
-        re.IGNORECASE,
-    )
-    for pm in proj_pat.finditer(readme_text):
-        kind = pm.group(1).lower()
-        local_naive = dt.datetime.strptime(pm.group(2), "%Y.%m.%d %H:%M")
-        deadline_utc = local_naive.replace(tzinfo=LOCAL_TZ).astimezone(UTC)
-        deadlines[f"project_{kind}"] = deadline_utc
+    # Project deadlines are written explicitly in the Day 9 section too
+    for key, pat in [
+        ("project_proposal", r"Project proposal dead-line:\s*(\d{4}\.\d{2}\.\d{2}\s+\d{2}:\d{2})"),
+        ("project_submission", r"Project submission dead-line:\s*(\d{4}\.\d{2}\.\d{2}\s+\d{2}:\d{2})"),
+    ]:
+        pm = re.search(pat, readme_text)
+        if pm:
+            local_naive = dt.datetime.strptime(pm.group(1), "%Y.%m.%d %H:%M")
+            deadlines[key] = local_naive.replace(tzinfo=LOCAL_TZ).astimezone(UTC)
 
     return deadlines
 
 
-def human_timedelta(hours: float) -> str:
+def human_delta_hours(hours: float) -> str:
     sign = "-" if hours < 0 else ""
     h = abs(hours)
     days = int(h // 24)
-    rem_h = h - days * 24
-    if days > 0:
-        return f"{sign}{days}d {rem_h:.1f}h"
-    return f"{sign}{rem_h:.1f}h"
+    rem = h - days * 24
+    if days:
+        return f"{sign}{days}d {rem:.1f}h"
+    return f"{sign}{rem:.1f}h"
+
+
+def percentile(sorted_vals: list[float], p: float) -> float:
+    if not sorted_vals:
+        return float("nan")
+    # p in [0,1]
+    idx = (len(sorted_vals) - 1) * p
+    lo = int(idx)
+    hi = min(lo + 1, len(sorted_vals) - 1)
+    frac = idx - lo
+    return sorted_vals[lo] * (1 - frac) + sorted_vals[hi] * frac
 
 
 def build_report(issues: list[Issue], students: list[str], deadlines: dict[str, dt.datetime]) -> str:
     roster = set(students)
 
-    # submissions[assignment][student] = earliest submission time
+    # assignment -> student -> earliest submission time
     submissions: dict[str, dict[str, dt.datetime]] = defaultdict(dict)
-
     for iss in issues:
         for a in iss.assignments:
             prev = submissions[a].get(iss.student)
             if prev is None or iss.created_at_utc < prev:
                 submissions[a][iss.student] = iss.created_at_utc
 
-    # Determine which assignments to report:
-    # - all "dayXX" that have deadlines
-    # - plus project proposal/submission deadlines if present
-    def sort_key(a: str) -> tuple[int, str]:
-        m = re.match(r"day(\d{2})$", a)
-        if m:
-            return (0, m.group(1))
-        return (1, a)
+    # Assignments we will report:
+    # union of (detected in subjects) and (deadlines in README)
+    detected_assignments = set(submissions.keys())
+    all_assignments = sorted(
+        detected_assignments | set(deadlines.keys()),
+        key=lambda a: (0, int(a[3:])) if re.fullmatch(r"day\d\d", a) else (1, a),
+    )
 
-    assignments_to_report = sorted(deadlines.keys(), key=sort_key)
-
-    # Popularity of title formats
     fmt_counts = Counter(iss.format_class for iss in issues)
 
-    # Prepare report
+    # Overall coverage table at the top
+    overall_rows = []
+    for a in all_assignments:
+        submap = submissions.get(a, {})
+        submitted = set(submap.keys())
+        missing = roster - submitted
+        dl = deadlines.get(a)
+        late = 0
+        if dl:
+            for _, t in submap.items():
+                if t > dl:
+                    late += 1
+        overall_rows.append((a, dl, len(submitted), len(missing), late))
+
     lines: list[str] = []
     lines.append("# Submission report\n")
     lines.append(f"Generated at (UTC): {dt.datetime.now(tz=UTC).strftime('%Y-%m-%d %H:%M')}\n")
-    lines.append("## What this report includes\n")
-    lines.append("- Missing submissions per assignment\n- Late submissions per assignment\n- Submission-time distribution vs deadline\n- Subject/title format popularity\n")
 
-    # Subject format popularity
+    lines.append("## Overall coverage (per assignment)\n")
+    lines.append("| Assignment | Deadline (Asia/Jerusalem) | Submitted | Missing | Late |")
+    lines.append("|---|---|---:|---:|---:|")
+    for a, dl, sub_n, miss_n, late_n in overall_rows:
+        dl_str = "—" if dl is None else dl.astimezone(LOCAL_TZ).strftime("%Y-%m-%d %H:%M")
+        lines.append(f"| {a} | {dl_str} | {sub_n}/{len(roster)} | {miss_n} | {late_n if dl else '—'} |")
+    lines.append("")
+
     lines.append("## Subject/title format popularity\n")
     lines.append("| Format | Count |")
     lines.append("|---|---:|")
@@ -270,55 +261,75 @@ def build_report(issues: list[Issue], students: list[str], deadlines: dict[str, 
         lines.append(f"| {fmt} | {c} |")
     lines.append("")
 
-    # Per assignment: missing + late + distribution
-    for a in assignments_to_report:
-        deadline = deadlines[a]
+    # Per-assignment detailed sections (this is what your pasted report is missing)
+    for a in all_assignments:
         submap = submissions.get(a, {})
         submitted_students = set(submap.keys())
         missing = sorted(roster - submitted_students)
 
-        # Compute deltas (hours) for submissions we have
-        deltas = []
-        late_list = []
-        for student, t_utc in submap.items():
-            hours = (t_utc - deadline).total_seconds() / 3600.0
-            deltas.append(hours)
-            if hours > 0:
-                late_list.append((hours, student, t_utc))
-
-        late_list.sort(reverse=True)
+        dl = deadlines.get(a)
 
         lines.append(f"## {a}\n")
-        lines.append(f"**Deadline (Asia/Jerusalem):** {deadline.astimezone(LOCAL_TZ).strftime('%Y-%m-%d %H:%M')}  ")
-        lines.append(f"**Deadline (UTC):** {deadline.strftime('%Y-%m-%d %H:%M')}\n")
+        if dl is None:
+            lines.append("**Deadline:** not found in README (e.g. `TBD`).\n")
+        else:
+            lines.append(f"**Deadline (Asia/Jerusalem):** {dl.astimezone(LOCAL_TZ).strftime('%Y-%m-%d %H:%M')}  ")
+            lines.append(f"**Deadline (UTC):** {dl.strftime('%Y-%m-%d %H:%M')}\n")
 
         lines.append(f"- **Submitted:** {len(submitted_students)}/{len(roster)}")
         lines.append(f"- **Missing:** {len(missing)}")
-        lines.append(f"- **Late submissions:** {len(late_list)}\n")
+        if dl is not None:
+            late_count = sum(1 for t in submap.values() if t > dl)
+            lines.append(f"- **Late:** {late_count}")
+        lines.append("")
 
         if missing:
             lines.append("### Missing students\n")
-            # Print in compact columns (bullets)
             for s in missing:
                 lines.append(f"- {s}")
             lines.append("")
 
-        if late_list:
-            lines.append("### Latest submissions (most late first)\n")
-            lines.append("| Student | Submitted (UTC) | Late by |")
-            lines.append("|---|---|---:|")
-            for hours, student, t_utc in late_list[:15]:
-                lines.append(f"| {student} | {t_utc.strftime('%Y-%m-%d %H:%M')} | {human_timedelta(hours)} |")
-            if len(late_list) > 15:
-                lines.append(f"\n(Showing 15 of {len(late_list)} late submissions.)\n")
-            else:
-                lines.append("")
-
-        if deltas:
+        # Late submissions details + distribution only if deadline exists
+        if dl is not None and submap:
+            deltas = []
+            late_list = []
+            for student, t_utc in submap.items():
+                hours = (t_utc - dl).total_seconds() / 3600.0
+                deltas.append(hours)
+                if hours > 0:
+                    late_list.append((hours, student, t_utc))
             deltas.sort()
+            late_list.sort(reverse=True)
+
+            if late_list:
+                lines.append("### Late submissions (most late first)\n")
+                lines.append("| Student | Submitted (Asia/Jerusalem) | Submitted (UTC) | Late by |")
+                lines.append("|---|---|---|---:|")
+                for hours, student, t_utc in late_list[:20]:
+                    t_local = t_utc.astimezone(LOCAL_TZ)
+                    lines.append(
+                        f"| {student} | {t_local.strftime('%Y-%m-%d %H:%M')} | {t_utc.strftime('%Y-%m-%d %H:%M')} | {human_delta_hours(hours)} |"
+                    )
+                if len(late_list) > 20:
+                    lines.append(f"\n(Showing 20 of {len(late_list)} late submissions.)\n")
+                else:
+                    lines.append("")
+
+            # Distribution summary
+            p10 = percentile(deltas, 0.10)
+            p50 = percentile(deltas, 0.50)
+            p90 = percentile(deltas, 0.90)
+
+            lines.append("### Distribution vs deadline (hours)\n")
+            lines.append(f"- **P10:** {human_delta_hours(p10)}")
+            lines.append(f"- **Median (P50):** {human_delta_hours(p50)}")
+            lines.append(f"- **P90:** {human_delta_hours(p90)}")
+            lines.append(f"- **Earliest:** {human_delta_hours(deltas[0])}")
+            lines.append(f"- **Latest:** {human_delta_hours(deltas[-1])}\n")
+
             # Histogram bins (hours relative to deadline)
             bins = [
-                (-10_000, -168, "≤ -7d (very early)"),
+                (-10_000, -168, "≤ -7d"),
                 (-168, -48, "(-7d, -2d]"),
                 (-48, -24, "(-2d, -1d]"),
                 (-24, -6, "(-1d, -6h]"),
@@ -339,11 +350,6 @@ def build_report(issues: list[Issue], students: list[str], deadlines: dict[str, 
             def pct(x: int) -> str:
                 return f"{100.0 * x / len(deltas):.1f}%"
 
-            lines.append("### Distribution vs deadline\n")
-            lines.append(f"- **Median:** {human_timedelta(deltas[len(deltas)//2])}")
-            lines.append(f"- **Min (earliest):** {human_timedelta(deltas[0])}")
-            lines.append(f"- **Max (latest):** {human_timedelta(deltas[-1])}\n")
-
             lines.append("| Time vs deadline | Count | Percent |")
             lines.append("|---|---:|---:|")
             for _, _, label in bins:
@@ -351,7 +357,7 @@ def build_report(issues: list[Issue], students: list[str], deadlines: dict[str, 
                 lines.append(f"| {label} | {c} | {pct(c)} |")
             lines.append("")
 
-    # Appendix: raw counts by assignment (including ones without deadlines)
+    # Appendix: raw detection
     lines.append("## Appendix: assignments detected in issue titles\n")
     detected = Counter()
     for iss in issues:
@@ -368,10 +374,10 @@ def build_report(issues: list[Issue], students: list[str], deadlines: dict[str, 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--subjects", default="day09/subjects.txt", help="Path to day09/subjects.txt")
-    parser.add_argument("--readme", default="README.md", help="Path to README.md")
-    parser.add_argument("--out", default="report.md", help="Where to write the report (ignored with --stdout)")
-    parser.add_argument("--stdout", action="store_true", help="Print report to stdout instead of writing a file")
+    parser.add_argument("--subjects", default="day09/subjects.txt")
+    parser.add_argument("--readme", default="README.md")
+    parser.add_argument("--out", default="report.md")
+    parser.add_argument("--stdout", action="store_true")
     args = parser.parse_args()
 
     with open(args.readme, "r", encoding="utf-8", errors="replace") as f:
